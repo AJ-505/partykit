@@ -3,7 +3,7 @@
  */
 
 import { renderHook, waitFor } from "@testing-library/react";
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { afterAll, beforeAll, describe, expect, test, vitest } from "vitest";
 import {
   WebSocket as WS,
@@ -974,6 +974,46 @@ describe.skipIf(!!process.env.GITHUB_ACTIONS)("usePartySocket", () => {
     unmount();
 
     expect(closeSpy).toHaveBeenCalled();
+  });
+
+  test("does not connect a stale replacement socket", async () => {
+    const rooms: string[] = [];
+
+    const { result } = renderHook(() => {
+      const [room, setRoom] = useState("a");
+      const flipsRef = useRef(0);
+      const socket = usePartySocket({
+        host: "example.com",
+        party: "main",
+        room,
+        maxRetries: 0,
+        startClosed: true
+      });
+
+      useEffect(() => {
+        if (flipsRef.current === 0 && room === "a") {
+          flipsRef.current = 1;
+          setRoom("b");
+        } else if (flipsRef.current === 1 && room === "b") {
+          flipsRef.current = 2;
+          setRoom("a");
+        }
+      }, [room]);
+
+      rooms.push(room);
+      return { room, socket };
+    });
+
+    await waitFor(() => {
+      expect(rooms).toContain("b");
+      expect(result.current.room).toBe("a");
+    });
+
+    await waitFor(() => {
+      expect(result.current.socket.partySocketOptions.room).toBe("a");
+    });
+
+    result.current.socket.close();
   });
 
   test("does not call reconnect on stale socket during token refresh", async () => {

@@ -228,6 +228,14 @@ export function useStableSocket<
           socket.reconnect();
         }
       } else if (socketInitializedRef.current !== socket) {
+        if (socketCreatedWithOptionsRef.current !== socketOptions) {
+          const newSocket = createReplacementSocketRef.current(socket);
+          setSocket(newSocket);
+          return () => {
+            newSocket.close();
+          };
+        }
+
         // replacement socket from an options change — always connect
         socket.reconnect();
       }
